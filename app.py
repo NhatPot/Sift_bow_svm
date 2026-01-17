@@ -228,7 +228,7 @@ def detect_objects_web(image, target_label, confidence_thresh, nms_thresh,
 # ============================================================================
 
 # Header
-st.title("🚗 Traffic Object Detection")
+st.title("🚶 Pedestrian Object Detection")
 st.markdown("### SIFT + Bag of Words + SVM + Sliding Window")
 st.markdown("---")
 

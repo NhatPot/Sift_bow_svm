@@ -1,267 +1,480 @@
-# Traffic Classification - SIFT + BoW + SVM
+# 🚗 Traffic Object Detection System
+## SIFT + Bag of Words + SVM + Sliding Window + Image Pyramid
 
-Dự án phân loại phương tiện giao thông sử dụng SIFT feature extraction, Bag of Words (BoW), và SVM classifier.
+Hệ thống nhận diện và phân loại đối tượng giao thông sử dụng Computer Vision cổ điển (SIFT features, BoW, SVM) với sliding window và multi-scale detection.
 
-## 📋 Mô tả
+---
 
-Mô hình này phân loại 5 loại đối tượng giao thông:
-- **Bus** (Xe buýt)
-- **Car** (Xe ô tô)
-- **Moto** (Xe máy)
-- **Pedestrian** (Người đi bộ)
-- **Truck** (Xe tải)
+## 📋 Tổng quan
+
+### Các loại đối tượng được nhận diện:
+- 🚗 **Car** (Xe ô tô)
+- 🚌 **Bus** (Xe buýt)  
+- 🚚 **Truck** (Xe tải)
+- 🚶 **Pedestrian** (Người đi bộ)
+- 🏍️ **Moto** (Xe máy)
+
+### Kiến trúc hệ thống:
+```
+Input Image → SIFT Features → Bag of Words → SVM Classifier → Bounding Boxes
+              ↓
+         Multi-scale Pyramid
+              ↓
+         Sliding Window
+              ↓
+    Non-Maximum Suppression
+```
 
 ### Quy trình hoạt động:
-1. Trích xuất đặc trưng SIFT từ ảnh đầu vào
-2. Xây dựng Bag of Words (BoW) dictionary sử dụng KMeans clustering (100 clusters)
-3. Vector hóa mỗi ảnh thành vector 100 chiều dựa trên BoW dictionary
-4. Huấn luyện mô hình SVM để phân loại
+1. **Training Phase**:
+   - Trích xuất SIFT descriptors từ training images
+   - Clustering với KMeansạo BoW dictionary (100 clusters)
+   - Tạo feature vectors cho mỗi ảnh
+   - Train SVM classifier với probability enabled
+
+2. **Detection Phase**:
+   - Resize ảnh ở nhiều scales (Image Pyramid)
+   - Sliding window trên mỗi scale
+   - Extract SIFT + BoW cho mỗi window
+   - SVM prediction với confidence threshold
+   - Non-Maximum Suppression để loại bỏ duplicate boxes
+
+---
 
 ## 🛠️ Yêu cầu hệ thống
 
-- Python 3.7 hoặc 3.8
-- Anaconda hoặc Miniconda
-- Windows/Linux/MacOS
+- **Python**: 3.7 hoặc 3.8
+- **OS**: Windows/Linux/MacOS
+- **RAM**: Tối thiểu 4GB (8GB đề xuất)
+- **Anaconda/Miniconda** (khuyến nghị)
 
-## 📦 Cài đặt với Anaconda
+---
 
-### Bước 1: Tạo môi trường Anaconda mới
+## 📦 Cài đặt
 
-Mở **Anaconda Prompt** và chạy các lệnh sau:
+### Bước 1: Tạo môi trường Anaconda
 
 ```bash
-# Tạo môi trường mới với Python 3.8
+# Tạo môi trường mới
 conda create -n traffic_classify python=3.8 -y
 
-# Kích hoạt môi trường
+# Kích hoạt
 conda activate traffic_classify
 ```
 
-### Bước 2: Cài đặt OpenCV với SIFT support
+### Bước 2: Cài đặt OpenCV với SIFT
 
-**Lưu ý quan trọng:** Code sử dụng `cv2.xfeatures2d.SIFT_create()` nên cần cài đặt `opencv-contrib-python` phiên bản 3.4.x.
+⚠️ **QUAN TRỌNG**: Phải dùng `opencv-contrib-python==3.4.18.65` để hỗ trợ `cv2.xfeatures2d.SIFT_create()`
 
 ```bash
-# Cài đặt opencv-contrib-python (bao gồm SIFT)
 pip install opencv-contrib-python==3.4.18.65
 ```
 
-**Tại sao dùng phiên bản 3.4.18.65?**
-- Code hiện tại sử dụng `cv2.xfeatures2d.SIFT_create()` - cú pháp của OpenCV 3.4.x
-- Phiên bản 3.4.18.65 là phiên bản ổn định cuối cùng của dòng 3.4.x
-- SIFT từng là thuật toán có bản quyền, từ OpenCV 4.4.0 trở đi đã được đưa trở lại với cú pháp khác: `cv2.SIFT_create()` thay vì `cv2.xfeatures2d.SIFT_create()`
-- Nếu muốn dùng OpenCV 4.x, bạn cần sửa code thay `cv2.xfeatures2d.SIFT_create()` thành `cv2.SIFT_create()`
+**Tại sao phiên bản 3.4.18.65?**
+- Code sử dụng `cv2.xfeatures2d.SIFT_create()` (cú pháp OpenCV 3.4.x)
+- SIFT đã được chuyển về main repo từ OpenCV 4.4.0 với cú pháp mới: `cv2.SIFT_create()`
+- Để dùng OpenCV 4.x, cần sửa tất cả `cv2.xfeatures2d.SIFT_create()` → `cv2.SIFT_create()`
 
 ### Bước 3: Cài đặt các thư viện khác
 
 ```bash
-# Cài đặt NumPy
-conda install numpy -y
+# Core libraries
+conda install numpy scikit-learn scipy matplotlib -y
 
-# Cài đặt Matplotlib
-conda install matplotlib -y
-
-# Cài đặt scikit-learn
-conda install scikit-learn -y
-
-# Cài đặt SciPy
-conda install scipy -y
+# For web app (optional)
+pip install streamlit
 ```
 
 ### Bước 4: Kiểm tra cài đặt
 
 ```bash
-python -c "import cv2; print('OpenCV version:', cv2.__version__); print('SIFT available:', hasattr(cv2.xfeatures2d, 'SIFT_create'))"
+python -c "import cv2; print('OpenCV:', cv2.__version__); print('SIFT:', hasattr(cv2.xfeatures2d, 'SIFT_create'))"
 ```
 
 Kết quả mong đợi:
 ```
-OpenCV version: 3.4.18
-SIFT available: True
+OpenCV: 3.4.18
+SIFT: True
 ```
+
+---
 
 ## 📂 Cấu trúc thư mục
 
 ```
 Sift_bow_svm/
 │
-├── Traffic_Classify.py          # File code chính
-├── README.md                     # File hướng dẫn này
+├── Traffic_Classify.py           # Training script
+├── Traffic_Detection_Demo.py     # CLI detection demo
+├── app.py                         # Streamlit web app
+├── README.md                      # Documentation
 │
 └── Traffic-Data/
-    ├── trainingset/              # Thư mục dữ liệu huấn luyện
-    │   ├── bus/                  # Ảnh xe buýt
-    │   ├── car/                  # Ảnh xe ô tô
-    │   ├── moto/                 # Ảnh xe máy
-    │   ├── pedestrian/           # Ảnh người đi bộ
-    │   └── truck/                # Ảnh xe tải
+    ├── trainingset/               # Training images
+    │   ├── bus/                   # Bus images
+    │   ├── car/                   # Car images
+    │   ├── moto/                  # Motorcycle images
+    │   ├── pedestrian/            # Pedestrian images
+    │   └── truck/                 # Truck images
     │
-    ├── image_test/               # Thư mục ảnh test
-    │   └── car.png               # Ảnh test mẫu
+    ├── image_test/                # Test images
+    │   ├── test_image.jpg         # Car test image
+    │   └── test_pedestrian.png    # Pedestrian test image
     │
-    └── bow_dictionary150.pkl     # BoW dictionary đã train (tạo tự động)
+    ├── bow_dictionary150.pkl      # BoW dictionary (auto-generated)
+    └── svm_model.pkl              # Trained SVM model (auto-generated)
 ```
 
-## 🚀 Chạy chương trình
+---
 
-### Chạy toàn bộ quy trình (training + testing)
+## 🚀 Sử dụng
+
+### 1️⃣ Training Model
+
+Train model với dữ liệu trong `Traffic-Data/trainingset/`:
 
 ```bash
-# Đảm bảo đã kích hoạt môi trường
-conda activate traffic_classify
-
-# Di chuyển vào thư mục dự án
-cd "c:\Users\MinhNhat\Desktop\Hoc Tap\Thac Si\Vision\Sift_bow_svm"
-
-# Chạy chương trình
 python Traffic_Classify.py
 ```
 
-### Kết quả mong đợi
+**Output:**
+- `Traffic-Data/bow_dictionary150.pkl` - BoW dictionary
+- `Traffic-Data/svm_model.pkl` - Trained SVM model
 
-Chương trình sẽ:
-1. Đọc dữ liệu từ thư mục `Traffic-Data/trainingset/`
-2. Trích xuất đặc trưng SIFT từ tất cả ảnh
-3. Tạo BoW dictionary (nếu chưa tồn tại file `bow_dictionary150.pkl`)
-4. Tạo vector đặc trưng cho mỗi ảnh
-5. Chia dữ liệu thành tập train (80%) và test (20%)
-6. Huấn luyện mô hình SVM
-7. Test với ảnh `Traffic-Data/image_test/car.png`
-8. In ra kết quả dự đoán và độ chính xác (accuracy)
-9. Hiển thị ảnh test
-
-**Output mẫu:**
+**Kết quả mẫu:**
 ```
+Training SVM with probability enabled...
+Saved SVM model to 'Traffic-Data/svm_model.pkl'
 [3]
-Your prediction:  car
-0.85
+Your prediction: car
+Accuracy: 0.85
 ```
 
-## 🔧 Tùy chỉnh
+**Lưu ý:**
+- Mỗi folder trong `trainingset/` phải có ít nhất 20-30 ảnh
+- Khi thêm/sửa dữ liệu, cần train lại model
+- Training images sẽ được resize về **64x128** (cho pedestrian) hoặc **64x80** (cho vehicles)
 
-### Thay đổi số lượng clusters trong BoW
+---
 
-Mở file `Traffic_Classify.py` và sửa dòng 56:
+### 2️⃣ CLI Detection Demo
+
+Chạy detection với sliding window trên ảnh test:
+
+```bash
+python Traffic_Detection_Demo.py
+```
+
+**Cấu hình trong code** (dòng 337-348):
+```python
+TEST_IMAGE_PATH = 'Traffic-Data/image_test/test_pedestrian.png'
+TARGET_LABEL = 'pedestrian'  # or 'car', 'bus', 'truck', 'moto'
+WINDOW_WIDTH = 64
+WINDOW_HEIGHT = 128
+STEP_SIZE = 5
+```
+
+**Tính năng:**
+- ✅ Multi-scale detection (Image Pyramid)
+- ✅ Sliding window với configurable step size
+- ✅ Confidence thresholding (default: 0.4)
+- ✅ Non-Maximum Suppression (NMS threshold: 0.15)
+- ✅ Real-time progress indicators
+
+**Output:**
+```
+Loading test image: Traffic-Data/image_test/test_pedestrian.png
+Image size: 187x336
+Detecting 'pedestrian' (ID: 0)
+Window size: 64x128, Step size: 5
+Using Image Pyramid (scale: 1.3)
+
+  Pyramid level 1: 187x336 (ratio: 1.00)
+    → Found 3 detections at this level
+
+  Pyramid level 2: 143x258 (ratio: 1.30)
+    → Found 5 detections at this level
+
+Total pyramid levels: 5
+Processed 558 windows across all scales
+Raw detections: 12
+Applying Non-Maximum Suppression...
+Final detections after NMS: 1
+
+Displaying result...
+Result saved to: Traffic-Data/detection_result.jpg
+```
+
+---
+
+### 3️⃣ Web App (Streamlit)
+
+Chạy interactive web interface:
+
+```bash
+streamlit run app.py
+```
+
+Web app mở tại: **http://localhost:8501**
+
+**Tính năng:**
+- 📁 Upload ảnh trực tiếp
+- 🎯 Chọn target object (pedestrian, car, bus, truck, moto)
+- 🎚️ Điều chỉnh Confidence Threshold (0.3 - 0.95)
+- 🔄 Điều chỉnh NMS Threshold (0.1 - 0.5)
+- 🔧 Advanced settings: window size, step size
+- 📊 Side-by-side comparison (original vs result)
+- ⏳ Progress bar khi processing
+- 💾 Model caching với `@st.cache_resource`
+
+**Screenshot:**
+```
+┌─────────────────────┬─────────────────────┐
+│  Original Image     │  Detected Objects   │
+│  [Upload ảnh]       │  [Kết quả với box]  │
+└─────────────────────┴─────────────────────┘
+       Detection Count: 2
+```
+
+---
+
+## ⚙️ Tham số quan trọng
+
+### Training Parameters (`Traffic_Classify.py`)
+
+| Tham số | Giá trị | Mô tả |
+|---------|---------|-------|
+| `num_clusters` | 100 | Số clusters cho BoW dictionary |
+| `SVM C` | 10 | Regularization parameter |
+| `probability` | True | Enable predict_proba() |
+| `train_test_split` | 0.8/0.2 | Train/test ratio |
+| `resize` | (64, 128) | Training image size |
+
+### Detection Parameters (`Traffic_Detection_Demo.py`)
+
+| Tham số | Pedestrian | Car/Vehicle | Mô tả |
+|---------|------------|-------------|-------|
+| `WINDOW_WIDTH` | 64 | 64-80 | Chiều rộng cửa sổ |
+| `WINDOW_HEIGHT` | 128 | 80 | Chiều cao cửa sổ |
+| `STEP_SIZE` | 5 | 8-15 | Bước nhảy sliding window |
+| `confidence_thresh` | 0.4 | 0.6 | Ngưỡng confidence |
+| `nms_thresh` | 0.15 | 0.2 | Ngưỡng NMS |
+| `min_sift` | 8 | 12 | Minimum SIFT descriptors |
+| `pyramid_scale` | 1.3 | 1.3 | Tỉ lệ thu nhỏ pyramid |
+
+---
+
+## 🎯 Điều chỉnh cho từng loại object
+
+### Detect Pedestrians (Người đi bộ)
+
+**Đặc điểm**: Chữ nhật đứng (1:2), ít texture (quần đen)
 
 ```python
-num_clusters = 100  # Thay đổi giá trị này (50, 150, 200, ...)
+# Traffic_Detection_Demo.py
+TARGET_LABEL = 'pedestrian'
+WINDOW_WIDTH = 64
+WINDOW_HEIGHT = 128  # Tỉ lệ 1:2
+STEP_SIZE = 5         # Quét kỹ
+confidence > 0.4      # Threshold thấp
+min_sift >= 8         # Cho low-texture
 ```
 
-**Lưu ý:** Khi thay đổi `num_clusters`, bạn cần xóa file `bow_dictionary150.pkl` để tạo lại dictionary.
+### Detect Cars/Vehicles
 
-### Thay đổi tham số SVM
-
-Mở file `Traffic_Classify.py` và sửa dòng 89:
+**Đặc điểm**: Hình chữ nhật, nhiều chi tiết
 
 ```python
-svm = sklearn.svm.SVC(C=10)  # Thay đổi tham số C, kernel, gamma, ...
+TARGET_LABEL = 'car'  # or 'bus', 'truck'
+WINDOW_WIDTH = 64
+WINDOW_HEIGHT = 80    # Gần vuông hơn
+STEP_SIZE = 10        # Nhanh hơn
+confidence > 0.6      # Threshold cao hơn
+min_sift >= 12        # Nhiều features
 ```
 
-Ví dụ:
-```python
-svm = sklearn.svm.SVC(C=10, kernel='rbf', gamma='auto')
-```
-
-### Test với ảnh khác
-
-Thay đổi đường dẫn ảnh test ở dòng 93:
-
-```python
-img_test = cv2.imread('Traffic-Data/image_test/car.png')  # Đổi thành đường dẫn ảnh của bạn
-```
+---
 
 ## ❗ Xử lý lỗi thường gặp
 
-### Lỗi: `AttributeError: module 'cv2' has no attribute 'xfeatures2d'`
+### 1. `AttributeError: module 'cv2' has no attribute 'xfeatures2d'`
 
-**Nguyên nhân:** Cài đặt `opencv-python` thay vì `opencv-contrib-python`
+**Nguyên nhân**: Cài đặt `opencv-python` thay vì `opencv-contrib-python`
 
-**Giải pháp:**
+**Giải pháp**:
 ```bash
 pip uninstall opencv-python opencv-contrib-python -y
 pip install opencv-contrib-python==3.4.18.65
 ```
 
-### Lỗi: `FileNotFoundError: Traffic-Data/trainingset`
+### 2. `cv2.error: resize() - Assertion failed !ssize.empty()`
 
-**Nguyên nhân:** Chưa có dữ liệu training hoặc đường dẫn sai
+**Nguyên nhân**: File ảnh corrupt hoặc không load được
 
-**Giải pháp:**
-- Đảm bảo thư mục `Traffic-Data/trainingset/` tồn tại
-- Đảm bảo có các thư mục con: `bus/`, `car/`, `moto/`, `pedestrian/`, `truck/`
-- Đảm bảo mỗi thư mục có ít nhất vài ảnh
+**Giải pháp**: 
+- Script đã tự động skip corrupt files
+- Kiểm tra log để tìm file lỗi và xóa/thay thế
 
-### Lỗi: `cv2.imshow()` không hiển thị ảnh
+### 3. `predict_proba is not available when probability=False`
 
-**Nguyên nhân:** Thiếu `cv2.waitKey()`
+**Nguyên nhân**: SVM được train không có `probability=True`
 
-**Giải pháp:** Đã được xử lý trong code (dòng 109)
-
-### Lỗi: Accuracy quá thấp
-
-**Giải pháp:**
-- Tăng số lượng dữ liệu training
-- Tăng số lượng clusters (ví dụ: 200, 300)
-- Thử các tham số SVM khác nhau (C, kernel, gamma)
-- Kiểm tra chất lượng ảnh training
-
-## 📊 Thông tin thêm
-
-### Các thư viện được sử dụng
-
-| Thư viện | Phiên bản đề xuất | Mục đích |
-|----------|-------------------|----------|
-| opencv-contrib-python | 3.4.18.65 | Trích xuất SIFT features |
-| numpy | latest | Xử lý ma trận và vector |
-| scikit-learn | latest | KMeans clustering và SVM |
-| scipy | latest | Tính khoảng cách Euclidean |
-| matplotlib | latest | Vẽ đồ thị (nếu cần) |
-
-### Tham số mô hình mặc định
-
-- **Số clusters (BoW):** 100
-- **SVM C parameter:** 10
-- **SVM kernel:** RBF (mặc định)
-- **Train/Test split:** 80/20
-- **Random state:** 42
-
-## 📝 Ghi chú
-
-- File `bow_dictionary150.pkl` sẽ được tự động tạo ra sau lần chạy đầu tiên
-- Quá trình tạo BoW dictionary có thể mất vài phút tùy thuộc vào số lượng ảnh
-- Khi thêm dữ liệu mới, nên xóa file `.pkl` để train lại dictionary
-
-## 🔄 Cập nhật môi trường
-
-Nếu cần cài đặt lại hoặc xuất môi trường:
-
-### Xuất danh sách packages
-
+**Giải pháp**: Train lại model
 ```bash
-conda activate traffic_classify
-conda list --export > requirements.txt
+python Traffic_Classify.py
 ```
 
-### Tạo file environment.yml
+### 4. Detection count = 0 (Không detect được)
 
-```bash
-conda env export > environment.yml
-```
+**Nguyên nhân**: 
+- Model chưa train lại sau khi thay đổi resize dimensions
+- Confidence threshold quá cao
+- Target object không có trong ảnh
 
-### Cài đặt từ environment.yml
+**Giải pháp**:
+1. Train lại model: `python Traffic_Classify.py`
+2. Giảm confidence threshold xuống 0.4-0.5
+3. Giảm min_sift xuống 8
+4. Tăng step_size lên 8-10 (quét nhanh hơn để test)
 
-```bash
-conda env create -f environment.yml
-```
+### 5. Quá nhiều false positives
 
-## 📧 Hỗ trợ
-
-Nếu gặp vấn đề, hãy kiểm tra:
-1. Phiên bản Python (nên dùng 3.7 hoặc 3.8)
-2. Phiên bản OpenCV (phải là opencv-contrib-python 3.4.18.65)
-3. Cấu trúc thư mục dữ liệu
-4. Đường dẫn file trong code
+**Giải pháp**:
+- Tăng confidence threshold lên 0.7-0.8
+- Giảm NMS threshold xuống 0.1-0.15
+- Tăng min_sift lên 15-20
 
 ---
 
-**Chúc bạn thành công! 🎉**
+## 📊 Performance Tips
+
+### Tăng tốc detection:
+- Tăng `STEP_SIZE` (trade-off: có thể bỏ sót)
+- Tăng `pyramid_scale` từ 1.3 → 1.5 (ít levels hơn)
+- Tăng `min_sift` để skip windows sớm
+
+### Tăng accuracy:
+- Giảm `STEP_SIZE` xuống 3-5
+- Giảm `pyramid_scale` xuống 1.2 (nhiều levels hơn)
+- Tăng số lượng training data
+- Tăng `num_clusters` lên 150-200
+
+### Giảm false positives:
+- Tăng `confidence_thresh`
+- Tăng `min_sift`
+- Giảm `nms_thresh`
+- Train với dữ liệu background
+
+---
+
+## 📝 Workflow Development
+
+### 1. Chuẩn bị dữ liệu
+```bash
+Traffic-Data/trainingset/
+├── pedestrian/  # 50+ images
+├── car/         # 50+ images
+└── ...
+```
+
+### 2. Train model
+```bash
+python Traffic_Classify.py
+```
+
+### 3. Test với CLI
+```bash
+python Traffic_Detection_Demo.py
+```
+
+### 4. Fine-tune parameters
+- Điều chỉnh confidence, NMS, step_size
+- Test lại
+
+### 5. Deploy web app
+```bash
+streamlit run app.py
+```
+
+---
+
+## 🔧 Advanced Customization
+
+### Thay đổi BoW clusters
+
+File: `Traffic_Classify.py`, line ~56
+```python
+num_clusters = 150  # Từ 100 → 150
+```
+→ Xóa `bow_dictionary150.pkl` và train lại
+
+### Thay đổi SVM kernel
+
+File: `Traffic_Classify.py`, line ~95
+```python
+svm = sklearn.svm.SVC(C=10, kernel='linear', probability=True)
+```
+
+### Thêm custom label
+
+1. Tạo folder trong `trainingset/` (ví dụ: `bicycle/`)
+2. Thêm vào `label2id`:
+```python
+label2id = {'pedestrian':0, 'moto':1, 'truck':2, 
+            'car':3, 'bus':4, 'bicycle':6, 'background':5}
+```
+3. Train lại model
+
+---
+
+## 📚 Technical Details
+
+### Algorithms Used:
+- **SIFT**: Scale-Invariant Feature Transform
+- **BoW**: Bag of Words với KMeans clustering
+- **SVM**: Support Vector Machine với RBF kernel
+- **NMS**: Non-Maximum Suppression (IoU-based)
+- **Image Pyramid**: Multi-scale representation
+
+### Libraries:
+- `opencv-contrib-python==3.4.18.65` - SIFT features
+- `numpy` - Array operations
+- `scikit-learn` - KMeans, SVM
+- `scipy` - Distance calculations
+- `streamlit` - Web interface
+
+---
+
+## 📖 References
+
+- [SIFT Paper](https://www.cs.ubc.ca/~lowe/papers/ijcv04.pdf) - Lowe, 2004
+- [Bag of Words in Computer Vision](https://en.wikipedia.org/wiki/Bag-of-words_model_in_computer_vision)
+- [OpenCV SIFT Tutorial](https://docs.opencv.org/3.4/da/df5/tutorial_py_sift_intro.html)
+- [Sliding Window Detection](https://www.pyimagesearch.com/2015/03/23/sliding-windows-for-object-detection-with-python-and-opencv/)
+
+---
+
+## 🤝 Contributing
+
+Contributions welcome! Areas for improvement:
+- [ ] Add more training data
+- [ ] Implement HOG features
+- [ ] Add deep learning comparison
+- [ ] Mobile deployment
+- [ ] Real-time video detection
+
+---
+
+## 📧 Support
+
+Nếu gặp vấn đề:
+1. Kiểm tra phiên bản Python (3.7-3.8)
+2. Kiểm tra OpenCV version (3.4.18.65)
+3. Đảm bảo có đủ training data
+4. Chạy lại training sau khi thay đổi code
+
+---
+
+**Made with ❤️ for Computer Vision**
+
+*Last updated: 2026-01-18*
