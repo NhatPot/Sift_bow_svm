@@ -22,7 +22,7 @@ def read_data(label2id):
 
 
 # Label to id, used to convert string label to integer 
-label2id = {'pedestrian':0, 'moto':1, 'truck':2, 'car':3, 'bus':4}
+label2id = {'pedestrian':0, 'moto':1, 'truck':2, 'car':3, 'bus':4, 'background':5}
 X, Y = read_data(label2id)
 
 

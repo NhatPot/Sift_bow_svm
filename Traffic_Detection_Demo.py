@@ -207,14 +207,29 @@ def detect_objects(image_path, target_label='car', winW=100, winH=100, stepSize=
             # Reshape for SVM prediction
             bow_feature = bow_feature.reshape(1, -1)
             
-            # Predict using SVM
-            prediction = svm.predict(bow_feature)[0]
+            # --- PREDICTION WITH CONFIDENCE (THAY VÌ PHÁN BỪA) ---
+            # Lấy xác suất của tất cả các lớp
+            probs = svm.predict_proba(bow_feature)[0]
             
-            # If prediction matches target, save bounding box
-            if prediction == target_id:
+            # Lấy nhãn có xác suất cao nhất
+            prediction = np.argmax(probs)
+            confidence = probs[prediction]
+
+            # ĐIỀU KIỆN LỌC KHẮT KHE HƠN:
+            # 1. Phải đúng nhãn target (ví dụ 'car')
+            # 2. Độ tự tin (confidence) phải lớn hơn 0.7 (70%)
+            # 3. Không được là nhãn background (ID: 5) - nếu có trong model
+            if prediction == target_id and confidence > 0.7:
+                # Kiểm tra thêm: không phải background nếu label 'background' tồn tại
+                if 'background' in label2id and prediction == label2id['background']:
+                    continue
+                    
                 detected_count += 1
                 box = [x, y, x + winW, y + winH]
                 detected_boxes.append(box)
+                
+                # In ra để debug xem nó tự tin bao nhiêu
+                print(f"Found {target_label} at ({x},{y}) with confidence: {confidence:.2f}")
                 
                 # Optional: draw all detections before NMS (for debugging)
                 # cv2.rectangle(clone, (x, y), (x + winW, y + winH), (0, 0, 255), 1)
