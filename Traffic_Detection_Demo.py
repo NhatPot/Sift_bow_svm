@@ -219,7 +219,7 @@ def detect_objects(image_path, target_label='car', winW=100, winH=100, stepSize=
             # 1. Phải đúng nhãn target (ví dụ 'car')
             # 2. Độ tự tin (confidence) phải lớn hơn 0.7 (70%)
             # 3. Không được là nhãn background (ID: 5) - nếu có trong model
-            if prediction == target_id and confidence > 0.7:
+            if prediction == target_id and confidence > 0.8:
                 # Kiểm tra thêm: không phải background nếu label 'background' tồn tại
                 if 'background' in label2id and prediction == label2id['background']:
                     continue
@@ -267,9 +267,9 @@ if __name__ == "__main__":
     # Configuration
     TEST_IMAGE_PATH = 'Traffic-Data/image_test/test_image.jpg'
     TARGET_LABEL = 'car'  # Change this to detect different objects
-    WINDOW_WIDTH = 100    # Adjust based on your training image size
-    WINDOW_HEIGHT = 100   # Adjust based on your training image size
-    STEP_SIZE = 20        # Smaller = more thorough but slower
+    WINDOW_WIDTH = 64     # Adjusted to match avg training size (63x81)
+    WINDOW_HEIGHT = 80    # Adjusted to match avg training size (63x81)
+    STEP_SIZE = 15        # Smaller step = more thorough detection
     
     print("=" * 70)
     print("TRAFFIC OBJECT DETECTION DEMO")

@@ -86,8 +86,9 @@ Y_train = []
 Y_test = []
 X_train, X_test, Y_train, Y_test = train_test_split(X_features, Y, test_size=0.2, random_state=42)
 
-svm = sklearn.svm.SVC(C = 10)
+svm = sklearn.svm.SVC(C=10, probability=True)
 svm.fit(X_train, Y_train)
+print("Training SVM with probability enabled...")
 
 # Luu model SVM
 pickle.dump(svm, open('Traffic-Data/svm_model.pkl', 'wb'))
