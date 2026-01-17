@@ -13,11 +13,30 @@ from sklearn.model_selection import train_test_split
 def read_data(label2id):
     X = []
     Y = []
+    skipped_files = 0
+    
     for label in os.listdir('Traffic-Data/trainingset'):
         for img_file in os.listdir(os.path.join('Traffic-Data/trainingset', label)):
-            img = cv2.imread(os.path.join('Traffic-Data/trainingset', label, img_file))            
+            img_path = os.path.join('Traffic-Data/trainingset', label, img_file)
+            img = cv2.imread(img_path)
+            
+            # CRITICAL: Skip if image failed to load (corrupt/invalid file)
+            if img is None:
+                print(f"WARNING: Skipping corrupt file: {img_path}")
+                skipped_files += 1
+                continue
+            
+            # QUAN TRỌNG: Resize về kích thước chuẩn
+            # Pedestrian: 64x128 (chữ nhật đứng, tỉ lệ 1:2)
+            # Car/Bus/Truck: có thể dùng 64x80 hoặc 100x100
+            img = cv2.resize(img, (64, 128))  # (width, height)
+            
             X.append(img)
             Y.append(label2id[label])
+    
+    if skipped_files > 0:
+        print(f"Total skipped files: {skipped_files}")
+    
     return X, Y
 
 

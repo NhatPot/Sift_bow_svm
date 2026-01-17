@@ -52,6 +52,42 @@ def create_bow_feature(descriptors, bow_dict, num_clusters):
 
 
 # ============================================================================
+# IMAGE PYRAMID FUNCTION (MULTI-SCALE DETECTION)
+# ============================================================================
+
+def pyramid(image, scale=1.3, minSize=(64, 128)):  # Scale 1.3 cho nhiều levels hơn
+    """
+    Tạo ra các phiên bản ảnh nhỏ dần (Image Pyramid) để detect vật thể ở nhiều scale
+    
+    Args:
+        image: Input image
+        scale: Tỉ lệ thu nhỏ mỗi lần (1.3 = mỗi lần nhỏ đi 1.3 lần, nhiều levels hơn)
+        minSize: (width, height) Kích thước tối thiểu, nhỏ hơn thì dừng
+                 (64, 128) for pedestrian | (64, 80) for cars
+    
+    Yields:
+        Ảnh đã resize
+    """
+    # Yield ảnh gốc đầu tiên
+    yield image
+    
+    # Vòng lặp thu nhỏ dần
+    while True:
+        # Tính kích thước mới
+        w = int(image.shape[1] / scale)
+        h = int(image.shape[0] / scale)
+        
+        # Resize ảnh
+        image = cv2.resize(image, (w, h), interpolation=cv2.INTER_AREA)
+        
+        # Nếu ảnh nhỏ hơn kích thước window thì dừng
+        if image.shape[0] < minSize[1] or image.shape[1] < minSize[0]:
+            break
+        
+        yield image
+
+
+# ============================================================================
 # SLIDING WINDOW FUNCTION
 # ============================================================================
 
@@ -141,9 +177,9 @@ def non_max_suppression(boxes, overlapThresh=0.3):
 # OBJECT DETECTION WITH SLIDING WINDOW
 # ============================================================================
 
-def detect_objects(image_path, target_label='car', winW=100, winH=100, stepSize=20):
+def detect_objects(image_path, target_label='car', winW=64, winH=80, stepSize=15, pyramid_scale=1.2):
     """
-    Detect objects in an image using sliding window and SVM
+    Detect objects in an image using MULTI-SCALE sliding window with Image Pyramid
     
     Args:
         image_path: Path to test image
@@ -151,6 +187,7 @@ def detect_objects(image_path, target_label='car', winW=100, winH=100, stepSize=
         winW: Window width
         winH: Window height
         stepSize: Step size for sliding window
+        pyramid_scale: Scale factor for image pyramid (1.2 = each layer is 1.2x smaller)
     
     Returns:
         Image with detected bounding boxes
@@ -174,77 +211,104 @@ def detect_objects(image_path, target_label='car', winW=100, winH=100, stepSize=
     target_id = label2id[target_label]
     print(f"Detecting '{target_label}' (ID: {target_id})")
     print(f"Window size: {winW}x{winH}, Step size: {stepSize}")
+    print(f"Using Image Pyramid (scale: {pyramid_scale})")
     
     # List to store detected bounding boxes
     detected_boxes = []
     
-    # Clone image for display
-    clone = image.copy()
+    # Counters
+    total_windows = 0
+    pyramid_level = 0
     
-    # Counter for windows processed
-    window_count = 0
-    detected_count = 0
-    
-    # Slide window across the image
-    for (x, y, window) in sliding_window(image, stepSize, (winW, winH)):
-        window_count += 1
+    # ========================================================================
+    # IMAGE PYRAMID LOOP - QUAN TRỌNG!
+    # ========================================================================
+    for resized in pyramid(image, scale=pyramid_scale, minSize=(winW, winH)):
+        pyramid_level += 1
         
-        # Skip if window is not the right size
-        if window.shape[0] != winH or window.shape[1] != winW:
-            continue
+        # Tính tỉ lệ resize so với ảnh gốc (để quy đổi tọa độ sau)
+        resize_ratio = image.shape[1] / float(resized.shape[1])
         
-        # Extract SIFT features
-        try:
-            sift_descriptors = extract_sift_features(window)
+        print(f"\n  Pyramid level {pyramid_level}: {resized.shape[1]}x{resized.shape[0]} (ratio: {resize_ratio:.2f})")
+        
+        # Counter for this pyramid level
+        level_detections = 0
+        
+        # Slide window across the RESIZED image
+        for (x, y, window) in sliding_window(resized, stepSize, (winW, winH)):
+            total_windows += 1
             
-            # Skip if no SIFT features detected
-            if sift_descriptors is None or len(sift_descriptors) == 0:
+            # Skip if window is not the right size
+            if window.shape[0] != winH or window.shape[1] != winW:
                 continue
             
-            # Create BoW feature vector
-            bow_feature = create_bow_feature(sift_descriptors, BoW, num_clusters)
-            
-            # Reshape for SVM prediction
-            bow_feature = bow_feature.reshape(1, -1)
-            
-            # --- PREDICTION WITH CONFIDENCE (THAY VÌ PHÁN BỪA) ---
-            # Lấy xác suất của tất cả các lớp
-            probs = svm.predict_proba(bow_feature)[0]
-            
-            # Lấy nhãn có xác suất cao nhất
-            prediction = np.argmax(probs)
-            confidence = probs[prediction]
-
-            # ĐIỀU KIỆN LỌC KHẮT KHE HƠN:
-            # 1. Phải đúng nhãn target (ví dụ 'car')
-            # 2. Độ tự tin (confidence) phải lớn hơn 0.7 (70%)
-            # 3. Không được là nhãn background (ID: 5) - nếu có trong model
-            if prediction == target_id and confidence > 0.8:
-                # Kiểm tra thêm: không phải background nếu label 'background' tồn tại
-                if 'background' in label2id and prediction == label2id['background']:
+            # Extract SIFT features
+            try:
+                sift_descriptors = extract_sift_features(window)
+                
+                # Skip if no SIFT features detected
+                if sift_descriptors is None or len(sift_descriptors) == 0:
                     continue
+                
+                # Filter: Skip windows with too few SIFT features
+                # EMERGENCY: Giảm xuống 8 để catch low-texture (quần đen)
+                if len(sift_descriptors) < 8:  # EMERGENCY: 12 → 8
+                    continue
+                
+                # Create BoW feature vector
+                bow_feature = create_bow_feature(sift_descriptors, BoW, num_clusters)
+                
+                # Reshape for SVM prediction
+                bow_feature = bow_feature.reshape(1, -1)
+                
+                # --- PREDICTION WITH CONFIDENCE ---
+                # Lấy xác suất của tất cả các lớp
+                probs = svm.predict_proba(bow_feature)[0]
+                
+                # Lấy nhãn có xác suất cao nhất
+                prediction = np.argmax(probs)
+                confidence = probs[prediction]
+
+                # ĐIỀU KIỆN LỌC (EMERGENCY - Rất thấp):
+                # 1. Phải đúng nhãn target
+                # 2. Confidence > 0.4 (40%) - EMERGENCY: Rất thấp!
+                # 3. Không được là background
+                if prediction == target_id and confidence > 0.4:  # EMERGENCY: 0.6 → 0.4
+                    # Kiểm tra thêm: không phải background nếu label 'background' tồn tại
+                    if 'background' in label2id and prediction == label2id['background']:
+                        continue
                     
-                detected_count += 1
-                box = [x, y, x + winW, y + winH]
-                detected_boxes.append(box)
-                
-                # In ra để debug xem nó tự tin bao nhiêu
-                print(f"Found {target_label} at ({x},{y}) with confidence: {confidence:.2f}")
-                
-                # Optional: draw all detections before NMS (for debugging)
-                # cv2.rectangle(clone, (x, y), (x + winW, y + winH), (0, 0, 255), 1)
+                    # ===== QUAN TRỌNG: QUY ĐỔI TỌA ĐỘ VỀ ẢNH GỐC =====
+                    # Vì đang tìm trên ảnh resize, phải nhân tọa độ với resize_ratio
+                    startX = int(x * resize_ratio)
+                    startY = int(y * resize_ratio)
+                    endX = int((x + winW) * resize_ratio)
+                    endY = int((y + winH) * resize_ratio)
+                    
+                    detected_boxes.append([startX, startY, endX, endY])
+                    level_detections += 1
+            
+            except Exception as e:
+                # Handle any errors during feature extraction
+                continue
         
-        except Exception as e:
-            # Handle any errors during feature extraction
-            continue
+        print(f"    → Found {level_detections} detections at this level")
     
-    print(f"\nProcessed {window_count} windows")
-    print(f"Raw detections: {detected_count}")
+    # ========================================================================
+    # END OF PYRAMID LOOP
+    # ========================================================================
+    
+    print(f"\nTotal pyramid levels: {pyramid_level}")
+    print(f"Processed {total_windows} windows across all scales")
+    print(f"Raw detections: {len(detected_boxes)}")
+    
+    # Clone image for display
+    clone = image.copy()
     
     # Apply Non-Maximum Suppression
     if len(detected_boxes) > 0:
         print("Applying Non-Maximum Suppression...")
-        final_boxes = non_max_suppression(detected_boxes, overlapThresh=0.3)
+        final_boxes = non_max_suppression(detected_boxes, overlapThresh=0.15)  # Giảm từ 0.3 → 0.15 để loại bỏ overlap tốt hơn
         print(f"Final detections after NMS: {len(final_boxes)}")
         
         # Draw final bounding boxes
@@ -259,17 +323,38 @@ def detect_objects(image_path, target_label='car', winW=100, winH=100, stepSize=
     return clone
 
 
+
+
+
+
+
+
 # ============================================================================
 # MAIN EXECUTION
 # ============================================================================
 
 if __name__ == "__main__":
-    # Configuration
-    TEST_IMAGE_PATH = 'Traffic-Data/image_test/test_image.jpg'
-    TARGET_LABEL = 'car'  # Change this to detect different objects
-    WINDOW_WIDTH = 64     # Adjusted to match avg training size (63x81)
-    WINDOW_HEIGHT = 80    # Adjusted to match avg training size (63x81)
-    STEP_SIZE = 15        # Smaller step = more thorough detection
+    # ========================================================================
+    # CONFIGURATION FOR PEDESTRIAN DETECTION
+    # ========================================================================
+    
+    # 1. Test image with pedestrians
+    TEST_IMAGE_PATH = 'Traffic-Data/image_test/test_pedestrian.png'
+    
+    # 2. Target label
+    TARGET_LABEL = 'pedestrian'  # Đổi từ 'car' sang 'pedestrian'
+    
+    # 3. Window size - PHẢI KHỚP với kích thước train (64x128)
+    WINDOW_WIDTH = 64      # Chữ nhật đứng cho người
+    WINDOW_HEIGHT = 128    # Tỉ lệ 1:2
+    
+    # 4. Step size - Nhỏ hơn vì người nhỏ hơn xe
+    STEP_SIZE = 5          # EMERGENCY: Giảm từ 10 → 5 để quét kỹ hơn
+    
+    # NOTE: Để detect xe (car/bus/truck), đổi lại:
+    # - TARGET_LABEL = 'car'
+    # - WINDOW_WIDTH = 64, WINDOW_HEIGHT = 80
+    # - STEP_SIZE = 15
     
     print("=" * 70)
     print("TRAFFIC OBJECT DETECTION DEMO")
