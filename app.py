@@ -96,12 +96,23 @@ def sliding_window(image, stepSize, windowSize):
             yield (x, y, image[y:y + windowSize[1], x:x + windowSize[0]])
 
 
-def non_max_suppression(boxes, overlapThresh=0.3):
-    """Apply NMS to eliminate redundant overlapping boxes"""
+def non_max_suppression(boxes, overlapThresh=0.5):
+    """
+    IMPROVED NMS: "Cá lớn nuốt cá bé"
+    - Sort by AREA (largest first) instead of y2
+    - Use Intersection over Min Area
+    - Higher default threshold (0.5) to aggressively eliminate nested boxes
+    
+    This eliminates part-based detections (leg, torso boxes inside full body box)
+    """
     if len(boxes) == 0:
         return []
     
+    # Convert to float for accurate computation
     boxes = np.array(boxes)
+    if boxes.dtype.kind == "i":
+        boxes = boxes.astype("float")
+    
     pick = []
     
     x1 = boxes[:, 0]
@@ -109,14 +120,20 @@ def non_max_suppression(boxes, overlapThresh=0.3):
     x2 = boxes[:, 2]
     y2 = boxes[:, 3]
     
+    # Calculate area of each box
     area = (x2 - x1 + 1) * (y2 - y1 + 1)
-    idxs = np.argsort(y2)
+    
+    # KEY CHANGE: Sort by AREA (largest first) instead of y2
+    # This prioritizes keeping the largest (full body) box
+    idxs = np.argsort(area)
     
     while len(idxs) > 0:
+        # Pick the largest box
         last = len(idxs) - 1
         i = idxs[last]
         pick.append(i)
         
+        # Find intersection with remaining boxes
         xx1 = np.maximum(x1[i], x1[idxs[:last]])
         yy1 = np.maximum(y1[i], y1[idxs[:last]])
         xx2 = np.minimum(x2[i], x2[idxs[:last]])
@@ -125,9 +142,68 @@ def non_max_suppression(boxes, overlapThresh=0.3):
         w = np.maximum(0, xx2 - xx1 + 1)
         h = np.maximum(0, yy2 - yy1 + 1)
         
-        overlap = (w * h) / area[idxs[:last]]
+        # Intersection over Min Area
+        intersection = w * h
+        other_areas = area[idxs[:last]]
         
-        idxs = np.delete(idxs, np.concatenate(([last], 
+        # Since sorting by area, current box is largest
+        # Min area is the other (smaller) boxes
+        min_area = other_areas
+        
+        overlap = intersection / min_area
+        
+        # Higher threshold (0.5): if small box is 50%+ covered by large box, remove it
+        idxs = np.delete(idxs, np.concatenate(([last],
+                         np.where(overlap > overlapThresh)[0])))
+    
+    return boxes[pick].astype("int").tolist()
+    """
+    Apply IMPROVED NMS using Intersection over Min Area
+    This eliminates nested boxes effectively (e.g., small box inside large box)
+    """
+    if len(boxes) == 0:
+        return []
+    
+    # Convert to float for accurate computation
+    boxes = np.array(boxes)
+    if boxes.dtype.kind == "i":
+        boxes = boxes.astype("float")
+    
+    pick = []
+    
+    x1 = boxes[:, 0]
+    y1 = boxes[:, 1]
+    x2 = boxes[:, 2]
+    y2 = boxes[:, 3]
+    
+    # Calculate area of each box
+    area = (x2 - x1 + 1) * (y2 - y1 + 1)
+    
+    # Sort by y2 (prefer larger/lower boxes)
+    idxs = np.argsort(y2)
+    
+    while len(idxs) > 0:
+        last = len(idxs) - 1
+        i = idxs[last]
+        pick.append(i)
+        
+        # Find intersection with remaining boxes
+        xx1 = np.maximum(x1[i], x1[idxs[:last]])
+        yy1 = np.maximum(y1[i], y1[idxs[:last]])
+        xx2 = np.minimum(x2[i], x2[idxs[:last]])
+        yy2 = np.minimum(y2[i], y2[idxs[:last]])
+        
+        w = np.maximum(0, xx2 - xx1 + 1)
+        h = np.maximum(0, yy2 - yy1 + 1)
+        
+        # --- KEY IMPROVEMENT: Use min area instead of union ---
+        # This detects when small box is nested inside large box
+        intersection = w * h
+        min_area = np.minimum(area[i], area[idxs[:last]])
+        overlap = intersection / min_area
+        
+        # Remove boxes with high overlap relative to smaller box
+        idxs = np.delete(idxs, np.concatenate(([last],
                          np.where(overlap > overlapThresh)[0])))
     
     return boxes[pick].astype("int").tolist()
@@ -211,10 +287,13 @@ def detect_objects_web(image, target_label, confidence_thresh, nms_thresh,
         final_boxes = non_max_suppression(detected_boxes, overlapThresh=nms_thresh)
         final_count = len(final_boxes)
         
-        # Draw boxes
+        # Draw boxes with improved text positioning
         for (x1, y1, x2, y2) in final_boxes:
             cv2.rectangle(clone, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(clone, target_label, (x1, y1 - 10), 
+            
+            # Smart text positioning: avoid edge clipping
+            text_y = y1 - 10 if y1 > 25 else y1 + 20
+            cv2.putText(clone, target_label, (x1, text_y), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
     
     if progress_bar:
