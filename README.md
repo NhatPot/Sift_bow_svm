@@ -1,28 +1,32 @@
-# 🚗 Traffic Object Detection System
+# 🚶 Pedestrian Detection System
 ## SIFT + Bag of Words + SVM + Sliding Window + Image Pyramid
 
-Hệ thống nhận diện và phân loại đối tượng giao thông sử dụng Computer Vision cổ điển (SIFT features, BoW, SVM) với sliding window và multi-scale detection.
+Hệ thống nhận diện người đi bộ sử dụng Computer Vision cổ điển (SIFT features, BoW, SVM) với sliding window và multi-scale detection.
 
 ---
 
 ## 📋 Tổng quan
 
-### Các loại đối tượng được nhận diện:
-- 🚗 **Car** (Xe ô tô)
-- 🚌 **Bus** (Xe buýt)  
-- 🚚 **Truck** (Xe tải)
-- 🚶 **Pedestrian** (Người đi bộ)
-- 🏍️ **Moto** (Xe máy)
+### Đối tượng được nhận diện:
+-  **🚶Pedestrian** (Người đi bộ)
 
 ### Kiến trúc hệ thống:
 ```
-Input Image → SIFT Features → Bag of Words → SVM Classifier → Bounding Boxes
-              ↓
-         Multi-scale Pyramid
-              ↓
+Input Image → Image Pyramid (Multi-scale)
+                ↓
          Sliding Window
-              ↓
-    Non-Maximum Suppression
+                ↓
+         SIFT Extraction
+                ↓
+         BoW Feature Vector
+                ↓
+         SVM Prediction (with confidence)
+                ↓
+         Confidence Filtering
+                ↓
+         Non-Maximum Suppression (NMS)
+                ↓
+         Bounding Boxes
 ```
 
 ### Quy trình hoạt động:
@@ -43,7 +47,7 @@ Input Image → SIFT Features → Bag of Words → SVM Classifier → Bounding B
 
 ## 🛠️ Yêu cầu hệ thống
 
-- **Python**: 3.7 hoặc 3.8
+- **Python**: 3.8
 - **OS**: Windows/Linux/MacOS
 - **RAM**: Tối thiểu 4GB (8GB đề xuất)
 - **Anaconda/Miniconda** (khuyến nghị)
@@ -468,13 +472,10 @@ Contributions welcome! Areas for improvement:
 ## 📧 Support
 
 Nếu gặp vấn đề:
-1. Kiểm tra phiên bản Python (3.7-3.8)
+1. Kiểm tra phiên bản Python (3.8)
 2. Kiểm tra OpenCV version (3.4.18.65)
 3. Đảm bảo có đủ training data
 4. Chạy lại training sau khi thay đổi code
 
 ---
 
-**Made with ❤️ for Computer Vision**
-
-*Last updated: 2026-01-18*
