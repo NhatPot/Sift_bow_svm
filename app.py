@@ -5,6 +5,27 @@ Feature Extraction + Classification Pipeline
 Run with: streamlit run app.py
 """
 
+import subprocess
+import sys
+
+# ============================================================================
+# AUTO-INSTALL DEPENDENCIES
+# ============================================================================
+
+def install_package(package):
+    """Install package using pip"""
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package, "-q"])
+
+# Check and install ultralytics if needed
+try:
+    import ultralytics
+except ImportError:
+    install_package("ultralytics")
+
+# ============================================================================
+# IMPORTS
+# ============================================================================
+
 import streamlit as st
 import cv2
 import numpy as np
