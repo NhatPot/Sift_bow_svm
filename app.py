@@ -239,7 +239,7 @@ def load_detector():
         return model
     except Exception as e:
         st.error(f"❌ Failed to initialize detection backend: {e}")
-        st.info("💡 Run: pip install ultralytics")
+        st.info("💡 Run: pip install ")
         st.stop()
 
 # Initialize detection backend
