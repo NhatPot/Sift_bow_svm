@@ -10,6 +10,8 @@ import cv2
 import numpy as np
 from PIL import Image
 import io
+import os
+from pathlib import Path
 
 # ============================================================================
 # PAGE CONFIG
@@ -21,57 +23,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# ============================================================================
-# LOAD OPTIMIZED DETECTION BACKEND (SYSTEM CACHE)
-# ============================================================================
-
-import os
-from pathlib import Path
-
-# Set cache directory BEFORE importing YOLO to prevent download to project folder
-_cache_dir = Path.home() / ".cache" / "vision_models"
-_cache_dir.mkdir(parents=True, exist_ok=True)
-os.environ['YOLO_CONFIG_DIR'] = str(_cache_dir)
-
-@st.cache_resource
-def load_detector():
-    """
-    Load detection backend from system cache.
-    Model stored in ~/.cache/vision_models/, NOT in project directory.
-    """
-    try:
-        from ultralytics import YOLO
-        from ultralytics import settings
-        
-        # Configure ultralytics to use system cache
-        settings.update({
-            'weights_dir': str(_cache_dir),
-            'runs_dir': str(_cache_dir / 'runs'),
-            'datasets_dir': str(_cache_dir / 'datasets'),
-        })
-        
-        # Change to cache directory during download
-        original_dir = os.getcwd()
-        os.chdir(str(_cache_dir))
-        
-        try:
-            model = YOLO('yolov8s.pt')
-        finally:
-            # Restore original directory
-            os.chdir(original_dir)
-        
-        return model
-    except Exception as e:
-        st.error(f"❌ Failed to initialize detection backend: {e}")
-        st.info("💡 Run: pip install ultralytics")
-        st.stop()
-
-# Initialize detection backend
-_detector = load_detector()
-
-# Internal class mapping
-_PERSON_CLASS_ID = 0
 
 # ============================================================================
 # DETECTION FUNCTION
@@ -143,19 +94,15 @@ def detect_objects_web(image, target_label, confidence_thresh, nms_thresh,
         # Draw bounding box
         cv2.rectangle(output_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
         
-        # Draw label with confidence score
-        label_text = f"{target_label} {confidence:.2f}"
+        # Draw label (without confidence score)
+        label_text = target_label
         text_y = y1 - 10 if y1 > 25 else y1 + 20
         
-        # Text background
-        (text_w, text_h), _ = cv2.getTextSize(
-            label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
-        )
-        cv2.rectangle(output_image, (x1, text_y - text_h - 5), 
-                     (x1 + text_w, text_y + 5), (0, 255, 0), -1)
-        
+        # Text with black outline for visibility
         cv2.putText(output_image, label_text, (x1, text_y), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 4)  # Black outline
+        cv2.putText(output_image, label_text, (x1, text_y), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)  # Green text
         
         detection_count += 1
     
@@ -235,7 +182,53 @@ with st.sidebar:
     st.markdown("---")
     st.info("💡 Adjust thresholds to fine-tune detection sensitivity")
 
-# Main area
+
+# ============================================================================
+# LOAD OPTIMIZED DETECTION BACKEND (SYSTEM CACHE)
+# ============================================================================
+
+# Set cache directory to prevent download to project folder
+_cache_dir = Path.home() / ".cache" / "vision_models"
+_cache_dir.mkdir(parents=True, exist_ok=True)
+os.environ['YOLO_CONFIG_DIR'] = str(_cache_dir)
+
+@st.cache_resource
+def load_detector():
+    """Load detection backend from system cache."""
+    try:
+        from ultralytics import YOLO
+        from ultralytics import settings
+        
+        # Configure to use system cache
+        settings.update({
+            'weights_dir': str(_cache_dir),
+            'runs_dir': str(_cache_dir / 'runs'),
+            'datasets_dir': str(_cache_dir / 'datasets'),
+        })
+        
+        # Change to cache directory during download
+        original_dir = os.getcwd()
+        os.chdir(str(_cache_dir))
+        
+        try:
+            model = YOLO('yolov8s.pt')
+        finally:
+            os.chdir(original_dir)
+        
+        return model
+    except Exception as e:
+        st.error(f"❌ Failed to initialize detection backend: {e}")
+        st.info("💡 Run: pip install ultralytics")
+        st.stop()
+
+# Initialize detection backend
+_detector = load_detector()
+
+
+# ============================================================================
+# MAIN CONTENT AREA
+# ============================================================================
+
 if uploaded_file is None:
     st.info("👈 **Please upload an image from the sidebar to start detection**")
     
